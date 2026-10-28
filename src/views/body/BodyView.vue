@@ -1,9 +1,9 @@
 <script setup>
 import { computed, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
-import { partById, parts } from "../body/catalog.js"
-import BodyScene from "../components/BodyScene.vue"
-import RegionGlyph from "../components/RegionGlyph.vue"
+import { partById, parts } from "./catalog.js"
+import BodyScene from "./BodyScene.vue"
+import RegionGlyph from "./RegionGlyph.vue"
 
 const route = useRoute()
 const router = useRouter()
@@ -12,7 +12,7 @@ const part = computed(() => (typeof route.query.part === "string" ? partById(rou
 watch(
   part,
   (item) => {
-    document.title = item ? item.name : "身体"
+    document.title = item ? item.name : "图解"
   },
   { immediate: true }
 )

@@ -1,4 +1,5 @@
 import { bodyParts3DMusculoskeletal as pack } from "@somakine/bodyparts3d-musculoskeletal"
+import muscleDoc from "./muscles.json"
 
 const structures = pack.structures
 const zh = pack.locales.find((item) => item.locale === "zh-CN")
@@ -38,6 +39,38 @@ export function partById(id) {
 
 export function labelOf(id) {
   return labels[id] || id
+}
+
+export function muscleLayerName(layer) {
+  const found = muscleDoc.layers.find((item) => item.layer === layer)
+  return found ? found.name : ""
+}
+
+const groupedNames = {
+  "股四头肌": ["股直肌", "股外侧肌", "股内侧肌", "股中间肌"]
+}
+
+export function musclesForStructure(structureId) {
+  const label = labelOf(structureId)
+  const names = groupedNames[label]
+  if (names) {
+    return muscleDoc.muscles.filter((item) => names.includes(item.肌肉名称))
+  }
+  const matched = muscleDoc.muscles.filter((item) => item.structureId === structureId)
+  if (matched.length > 0) {
+    return matched
+  }
+  return muscleDoc.muscles.filter((item) => item.肌肉名称 === label)
+}
+
+export function idsForMuscleLayer(part, layer) {
+  const ids = new Set(
+    muscleDoc.muscles.filter((item) => item.layer === layer && item.structureId).map((item) => item.structureId)
+  )
+  return part
+    .list()
+    .filter((item) => ids.has(item.id))
+    .map((item) => item.id)
 }
 
 export function idsFor(part, mode) {

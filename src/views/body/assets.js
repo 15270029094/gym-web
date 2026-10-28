@@ -1,5 +1,5 @@
 const glbModules = import.meta.glob(
-  "../../node_modules/@somakine/bodyparts3d-musculoskeletal/public/assets/**/*.glb",
+  "../../../node_modules/@somakine/bodyparts3d-musculoskeletal/public/assets/**/*.glb",
   { query: "?url", import: "default", eager: true }
 )
 

@@ -3,9 +3,9 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { ElMessage } from "element-plus"
 import { SomakineViewer } from "@somakine/vue"
 import { bodyParts3DMusculoskeletal } from "@somakine/bodyparts3d-musculoskeletal"
-import { resolveBodyAsset } from "../body/assets.js"
-import { createOrientationGizmo } from "../body/gizmo.js"
-import { idsFor, labelOf, searchStructures } from "../body/catalog.js"
+import { resolveBodyAsset } from "./assets.js"
+import { createOrientationGizmo } from "./gizmo.js"
+import { idsFor, idsForMuscleLayer, labelOf, musclesForStructure, searchStructures } from "./catalog.js"
 
 const props = defineProps({
   part: { type: Object, required: true }
@@ -17,7 +17,6 @@ const gizmo = ref(null)
 const stage = ref(null)
 let gizmoApi = null
 let viewerReady = false
-let awaitingShow = false
 
 const status = ref("正在加载模型")
 const selectedId = ref("")
@@ -26,13 +25,18 @@ const active = ref("bone")
 const menuOpen = ref(false)
 const settingsOpen = ref(false)
 const query = ref("")
-const dark = ref(props.part.scene !== "full")
+const dark = ref(true)
 const tip = ref(props.part.scene !== "full")
 const exploded = ref(false)
 const showTendon = ref(false)
 const favorites = ref(loadFavorites())
+const muscleLayer = ref(0)
+const layerApplied = ref(false)
+const muscleCard = ref(null)
+let pointer = null
 
 const isFull = computed(() => props.part.scene === "full")
+const layerLabel = computed(() => (layerApplied.value ? muscleLevelLabel(muscleLayer.value) : ""))
 const results = computed(() => searchStructures(props.part, query.value))
 const menuItems = computed(() =>
   idsFor(props.part, "all").map((id) => ({ id, label: labelOf(id) }))
@@ -54,7 +58,7 @@ const systems = [
 watch(
   () => props.part.id,
   () => {
-    dark.value = props.part.scene !== "full"
+    dark.value = true
     tip.value = props.part.scene !== "full"
     active.value = props.part.scene === "full" ? "all" : "bone"
     menuOpen.value = false
@@ -62,6 +66,7 @@ watch(
     query.value = ""
     selectedId.value = ""
     selectedLabel.value = ""
+    muscleCard.value = null
     if (viewerReady) {
       openPart()
     }
@@ -80,34 +85,35 @@ function notify(message) {
   ElMessage({ message, duration: 2200, grouping: true })
 }
 
+function muscleLevelLabel(level) {
+  if (level === 1) {
+    return "深层"
+  }
+  if (level === 2) {
+    return "中层、深层"
+  }
+  if (level === 3) {
+    return "全部"
+  }
+  return ""
+}
+
 function openPart() {
+  muscleLayer.value = props.part.scene === "full" ? 3 : 0
+  layerApplied.value = false
   const handle = viewer.value
   if (!handle || !handle.isReady) {
     return
   }
   if (props.part.scene === "full") {
-    awaitingShow = true
     active.value = "all"
     handle.showBody()
     return
   }
-  awaitingShow = false
   active.value = "bone"
   const ids = idsFor(props.part, "bone")
   if (ids.length > 0) {
     handle.setVisible(ids)
-  }
-}
-
-function ghostRightMuscles() {
-  const handle = viewer.value
-  if (!handle) {
-    return
-  }
-  for (const item of props.part.list()) {
-    if (item.type === "muscle" && item.laterality === "paired") {
-      handle.setStructureStyle(item.id, { opacity: 0.16, transparent: true, color: "#f4f4f4" }, { side: "right" })
-    }
   }
 }
 
@@ -116,6 +122,8 @@ function showMode(mode) {
   if (!handle || !handle.isReady) {
     return
   }
+  muscleLayer.value = mode === "all" || mode === "muscle" ? 3 : 0
+  layerApplied.value = false
   active.value = mode
   const ids = idsFor(props.part, mode === "all" ? "all" : mode)
   if (ids.length === 0) {
@@ -123,17 +131,52 @@ function showMode(mode) {
     return
   }
   handle.setVisible(ids)
-  if (props.part.scene === "full" && mode === "all") {
-    awaitingShow = true
+}
+
+function applyMuscleLevel(level) {
+  const handle = viewer.value
+  if (!handle || !handle.isReady) {
+    return
+  }
+  active.value = "muscle"
+  layerApplied.value = true
+  selectedId.value = ""
+  selectedLabel.value = ""
+  muscleCard.value = null
+  const layers = level === 1 ? [3] : level === 2 ? [3, 2] : [3, 2, 1]
+  const muscleIds = [...new Set(layers.flatMap((layer) => idsForMuscleLayer(props.part, layer)))]
+  const rest = props.part
+    .list()
+    .filter((item) => item.type !== "muscle")
+    .map((item) => item.id)
+  handle.setVisible([...rest, ...muscleIds])
+  if (muscleIds.length === 0) {
+    notify("这个部位没有" + muscleLevelLabel(level))
   }
 }
 
 function showMuscles() {
-  showMode("muscle")
+  if (!viewer.value || !viewer.value.isReady) {
+    return
+  }
+  if (muscleLayer.value >= 3) {
+    notify("已经显示全部肌肉")
+    return
+  }
+  muscleLayer.value += 1
+  applyMuscleLevel(muscleLayer.value)
 }
 
 function hideMuscles() {
-  showMode("bone")
+  if (!viewer.value || !viewer.value.isReady) {
+    return
+  }
+  if (muscleLayer.value === 1 && layerApplied.value) {
+    notify("已经是深层")
+    return
+  }
+  muscleLayer.value = muscleLayer.value <= 1 ? 1 : muscleLayer.value - 1
+  applyMuscleLevel(muscleLayer.value)
 }
 
 function onSystem(item) {
@@ -261,9 +304,65 @@ function onDouble(event) {
   tip.value = false
 }
 
+function onStagePointerDown(event) {
+  if (event.target.closest("button, a, input, textarea, .muscle-card, .rail, .systems, .search, .menu-panel")) {
+    pointer = null
+    return
+  }
+  pointer = { x: event.clientX, y: event.clientY }
+}
+
+function onStagePointerUp(event) {
+  if (!pointer) {
+    return
+  }
+  const moved = Math.hypot(event.clientX - pointer.x, event.clientY - pointer.y)
+  if (moved > 6) {
+    pointer = null
+    return
+  }
+  const handle = viewer.value
+  if (handle && handle.isReady && handle.pickAt(pointer.x, pointer.y).length === 0) {
+    muscleCard.value = null
+  }
+}
+
+function placeCard(clientX, clientY) {
+  const box = stage.value.getBoundingClientRect()
+  const width = 300
+  const onLeft = clientX < box.left + box.width / 2
+  const leftInset = onLeft ? (isFull.value ? 16 : 72) : box.width - width - (isFull.value ? 76 : 88)
+  let top = clientY - box.top - 24
+  if (onLeft && isFull.value) {
+    top = Math.max(168, top)
+  }
+  top = Math.max(16, Math.min(top, box.height - 200))
+  return { left: leftInset, top }
+}
+
 function onSelection(selection) {
   selectedId.value = selection.structure.id
   selectedLabel.value = selection.label
+  const items = musclesForStructure(selection.structure.id)
+  if (items.length === 0) {
+    muscleCard.value = null
+    return
+  }
+  const box = stage.value.getBoundingClientRect()
+  const point = pointer || {
+    x: selection.side === "left" ? box.right - 80 : box.left + 80,
+    y: box.top + box.height * 0.35
+  }
+  muscleCard.value = { ...placeCard(point.x, point.y), items }
+  pointer = null
+}
+
+function onSelectionGroup(selections) {
+  if (!selections || selections.length === 0) {
+    selectedId.value = ""
+    selectedLabel.value = ""
+    muscleCard.value = null
+  }
 }
 
 function ensureOpen() {
@@ -280,11 +379,6 @@ function onState(state) {
     status.value = ""
     if (!viewerReady) {
       ensureOpen()
-      return
-    }
-    if (awaitingShow && props.part.scene === "full") {
-      awaitingShow = false
-      ghostRightMuscles()
     }
     return
   }
@@ -320,7 +414,7 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="scene" :class="{ dark }">
-    <div ref="stage" class="scene-stage" @dblclick="onDouble">
+    <div ref="stage" class="scene-stage" @dblclick="onDouble" @pointerdown="onStagePointerDown" @pointerup="onStagePointerUp">
       <SomakineViewer
         ref="viewer"
         :dataset="bodyParts3DMusculoskeletal"
@@ -331,6 +425,7 @@ onBeforeUnmount(() => {
         locale="zh-CN"
         :background="null"
         @selection="onSelection"
+        @selection-group="onSelectionGroup"
         @state-change="onState"
         @asset-progress="onProgress"
         @error="onError"
@@ -339,13 +434,32 @@ onBeforeUnmount(() => {
       <button type="button" class="back" @click="emit('back')">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5L8 12l7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
       </button>
-      <p v-if="selectedLabel" class="pick">{{ selectedLabel }}</p>
+      <p v-if="selectedLabel && !muscleCard" class="pick">{{ selectedLabel }}</p>
+      <aside v-if="muscleCard" class="muscle-card" :style="{ left: muscleCard.left + 'px', top: muscleCard.top + 'px' }" @pointerdown.stop>
+        <button type="button" class="card-close" @click="muscleCard = null">×</button>
+        <section v-for="item in muscleCard.items" :key="item.id">
+          <header>
+            <strong>{{ item.肌肉名称 }}</strong>
+            <em>{{ item.分层 }} · {{ item.肌群 }}</em>
+          </header>
+          <p class="role">{{ item.主要动作 }}</p>
+          <p class="detail">{{ item.详细说明 }}</p>
+          <dl>
+            <div><dt>起点</dt><dd>{{ item.起点 }}</dd></div>
+            <div><dt>止点</dt><dd>{{ item.止点 }}</dd></div>
+            <div><dt>拮抗肌</dt><dd>{{ item.拮抗肌 }}</dd></div>
+            <div><dt>神经</dt><dd>{{ item.神经支配 }}</dd></div>
+          </dl>
+          <p class="clinic">{{ item.临床提示 }}</p>
+        </section>
+      </aside>
       <p v-if="status" class="status">{{ status }}</p>
 
       <div v-if="isFull" class="rail right light-rail">
         <div class="step">
           <button type="button" @click="showMuscles"><b>+</b><span>肌肉+</span></button>
           <button type="button" @click="hideMuscles"><b>−</b><span>肌肉-</span></button>
+          <span v-if="layerLabel" class="layer-now">{{ layerLabel }}</span>
         </div>
         <button type="button" @click="toggleFullscreen"><i class="ico">⛶</i><span>全屏</span></button>
         <button type="button" @click="hideSelected"><i class="ico">◌</i><span>速隐</span></button>
@@ -372,6 +486,7 @@ onBeforeUnmount(() => {
 
       <div v-if="!isFull" class="systems">
         <button type="button" class="sys menu" @click="menuOpen = !menuOpen">菜单</button>
+        <span v-if="layerLabel" class="layer-now">{{ layerLabel }}</span>
         <button
           v-for="item in systems"
           :key="item.id"

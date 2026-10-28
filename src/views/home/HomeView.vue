@@ -1,5 +1,5 @@
 <template>
   <section class="placeholder">
-    <p>我的</p>
+    <p>首页</p>
   </section>
 </template>
