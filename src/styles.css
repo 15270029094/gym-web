@@ -102,9 +102,60 @@ a {
   top: 10px;
 }
 
+.gizmo {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 96px;
+  height: 96px;
+  z-index: 6;
+  cursor: pointer;
+}
+
 .status {
   left: 12px;
   bottom: 12px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 999px;
+  background: #ececef;
+}
+
+.seg-item {
+  border: 0;
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: transparent;
+  color: #666666;
+  font-size: 13px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.seg-item.on {
+  background: #1a1a1a;
+  color: #ffffff;
+}
+
+.reset {
+  border: 1px solid #d8d8dc;
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #1a1a1a;
+  font-size: 13px;
+  line-height: 18px;
+  cursor: pointer;
 }
 
 .layers {
