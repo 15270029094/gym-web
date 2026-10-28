@@ -5,11 +5,12 @@ import TabBar from "./components/TabBar.vue"
 
 const route = useRoute()
 const title = computed(() => route.meta.title || "gym")
+const inScene = computed(() => route.name === "body" && typeof route.query.part === "string")
 </script>
 
 <template>
   <div class="shell">
-    <header class="nav">{{ title }}</header>
+    <header v-if="!inScene" class="nav">{{ title }}</header>
     <main class="main">
       <router-view />
     </main>
