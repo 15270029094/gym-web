@@ -1,0 +1,22 @@
+{
+  "name": "gym-web",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@somakine/bodyparts3d-musculoskeletal": "^0.2.0",
+    "@somakine/vue": "^0.2.0",
+    "three": "^0.180.0",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "vite": "^6.0.11"
+  }
+}
